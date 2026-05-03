@@ -20,13 +20,13 @@ Dự án quạt thông minh sử dụng ESP32. Hệ thống có khả năng tự
 - L298N
 
 ##  Cấu trúc code
-- main/main.cpp: chương trình chính
-- main/modules/: các module chức năng
-  - fan_speed.*: điều khiển tốc độ quạt
-  - servo_track.*: điều khiển hướng quạt
-  - wifi_manager.*: kết nối WiFi
-  - oled_display.*: hiển thị OLED
-  - dht.*: đọc cảm biến nhiệt độ
+- `main/main.cpp`: chương trình chính
+- `main/modules/`: các module chức năng
+  - `fan_speed.*`: điều khiển tốc độ quạt
+  - `servo_track.*`: điều khiển hướng quạt
+  - `wifi_manager.*`: kết nối WiFi
+  - `oled_display.*`: hiển thị OLED
+  - `dht.*`: đọc cảm biến nhiệt độ
 
 ##  Cách chạy
 1. Mở project bằng ESP-IDF
