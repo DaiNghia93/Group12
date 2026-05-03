@@ -8,15 +8,29 @@
       "cStandard": "c11",
       "cppStandard": "c++17",
       "includePath": [
-        "${workspaceFolder}/**"
+        "${workspaceFolder}/**",
+        "${workspaceFolder}/build/config",
+        "C:/Espressif/frameworks/esp-idf/components/**",
+        "C:/Espressif/frameworks/esp-idf/components/freertos/include",
+        "C:/Espressif/frameworks/esp-idf/components/freertos/esp_additions/include",
+        "C:/Espressif/frameworks/esp-idf/components/esp_wifi/include",
+        "C:/Espressif/frameworks/esp-idf/components/esp_common/include",
+        "C:/Espressif/frameworks/esp-idf/components/esp32s3/include",
+        "C:/Espressif/frameworks/esp-idf/components/driver/include",
+        "C:/Espressif/frameworks/esp-idf/components/soc/include",
+        "C:/Espressif/frameworks/esp-idf/components/hal/include",
+        "C:/Espressif/frameworks/esp-idf/components/esp_hw_support/include",
+        "C:/Espressif/frameworks/esp-idf/tools/cmake"
       ],
       "defines": [
         "__XTENSA__",
-        "ESP32S3"
+        "ESP32S3",
+        "CONFIG_IDF_TARGET_ESP32S3=1"
       ],
       "browse": {
         "path": [
-          "${workspaceFolder}/**"
+          "${workspaceFolder}/**",
+          "C:/Espressif/frameworks/esp-idf/components"
         ],
         "limitSymbolsToIncludedHeaders": true
       }

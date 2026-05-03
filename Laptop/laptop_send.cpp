@@ -14,7 +14,7 @@ int main(int argc, char* argv[]) {
     printf("=== ctrl_eqip: Laptop AI + ESP32 Serial ===\n");
 
     const char* model_path = "models/Body-Detection-Model_640x384.onnx";
-    const char* com_port   = "COM5";
+    const char* com_port   = "COM3";
 
     if (argc >= 2) com_port = argv[1];
 

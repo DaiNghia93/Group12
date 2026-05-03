@@ -29,7 +29,7 @@ void fan_speed_update(float dist_m);
  * @brief Dừng quạt ngay lập tức (dùng khi Timeout mất người).
  */
 void fan_speed_stop(void);
-
+float fan_get_temperature(void);
 #ifdef __cplusplus
 }
 #endif

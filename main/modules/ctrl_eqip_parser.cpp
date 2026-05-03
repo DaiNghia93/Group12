@@ -4,8 +4,11 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include <cstring>
+#include "freertos/semphr.h"
 
 static const char *TAG = "ctrl_eqip_parser";
+static SemaphoreHandle_t data_mutex;
+
 
 #define UART_PORT_NUM UART_NUM_0
 #define UART_BAUD_RATE 115200
@@ -55,7 +58,13 @@ static void handle_target_info(const uint8_t *payload) {
   memcpy(&new_data.target_y, &y_raw, 4);
 
   // Cập nhật dữ liệu toàn cục
-  g_latest_data = new_data;
+  if (data_mutex) {
+    xSemaphoreTake(data_mutex, portMAX_DELAY);
+    g_latest_data = new_data;
+    xSemaphoreGive(data_mutex);
+  } else {
+    g_latest_data = new_data;
+  }
   g_last_recv_tick = xTaskGetTickCount(); // Đánh dấu thời điểm nhận
 
   if (g_latest_data.person_count > 0) {
@@ -123,6 +132,10 @@ static void uart_rx_task(void *arg) {
 // Khai báo APIs
 
 void ce_parser_init(void) {
+  data_mutex = xSemaphoreCreateMutex();
+  if (data_mutex == NULL) {
+    ESP_LOGE(TAG, "Tao mutex THAT BAI!");
+  }  
   uart_config_t uart_config = {};
   uart_config.baud_rate = UART_BAUD_RATE;
   uart_config.data_bits = UART_DATA_8_BITS;
@@ -134,20 +147,31 @@ void ce_parser_init(void) {
   uart_driver_install(UART_PORT_NUM, UART_BUF_SIZE * 2, 0, 0, NULL, 0);
   uart_param_config(UART_PORT_NUM, &uart_config);
 
-  xTaskCreate(uart_rx_task, "uart_rx", 4096, NULL, 10, NULL);
+  xTaskCreate(uart_rx_task, "uart_rx", 4096, NULL, 6, NULL);
   ESP_LOGI(TAG, "Parser da khoi dong. Dang nghe tai UART_NUM_0...");
 }
 
 CeAiData ce_parser_get_data(void) {
-  // Nếu quá 3 giây không nhận gói tin mới -> tự động reset về 0
+  CeAiData data;
+
+  if (data_mutex) {
+    xSemaphoreTake(data_mutex, portMAX_DELAY);
+    data = g_latest_data;
+    xSemaphoreGive(data_mutex);
+  } else {
+    data = g_latest_data;
+  }
+
+  // timeout xử lý sau khi copy
   if (g_last_recv_tick > 0) {
     TickType_t elapsed = xTaskGetTickCount() - g_last_recv_tick;
     if (elapsed >= pdMS_TO_TICKS(DATA_TIMEOUT_MS)) {
-      g_latest_data.person_count = 0;
-      g_latest_data.distance_m = 0.0f;
-      g_latest_data.target_x = 0.0f;
-      g_latest_data.target_y = 0.0f;
+      data.person_count = 0;
+      data.distance_m = 0.0f;
+      data.target_x = 0.0f;
+      data.target_y = 0.0f;
     }
   }
-  return g_latest_data;
+
+  return data;
 }

@@ -6,8 +6,10 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include <algorithm>
+#include "freertos/semphr.h"
 
 static const char *TAG = "fan_speed";
+static SemaphoreHandle_t dht_mutex;
 
 // ==== CẤU HÌNH L298N ====
 #define L298N_ENA_GPIO GPIO_NUM_4 // Chân xuất PWM
@@ -32,6 +34,8 @@ static const char *TAG = "fan_speed";
 static float ema_dist = 3.0f;
 static float ema_temp = 25.0f;
 
+
+
 // ==== BIẾN NỘI BỘ CHO DHT22 ====
 static float g_dht_temp = 25.0f; // Nhiệt độ mặc định khi chưa đọc được
 static float g_dht_humidity = 0.0f;
@@ -40,7 +44,6 @@ static float g_dht_humidity = 0.0f;
 static void dht_read_task(void *arg) {
   float temp = 0.0f;
   float hum = 0.0f;
-
   // Chờ 1 giây sau khi boot cho cảm biến ổn định
   vTaskDelay(pdMS_TO_TICKS(1000));
 
@@ -48,8 +51,17 @@ static void dht_read_task(void *arg) {
     esp_err_t ret = dht_read_float_data(DHT_TYPE, DHT_GPIO, &hum, &temp);
 
     if (ret == ESP_OK) {
-      g_dht_temp = temp;
-      g_dht_humidity = hum;
+      if (dht_mutex) {
+          xSemaphoreTake(dht_mutex, portMAX_DELAY);
+          g_dht_temp = temp;
+          g_dht_humidity = hum;
+          xSemaphoreGive(dht_mutex);
+      } else {
+          // fallback nếu mutex lỗi
+          g_dht_temp = temp;
+          g_dht_humidity = hum;
+      }
+
       ESP_LOGI(TAG, "[DHT22] Nhiet do: %.1f°C | Do am: %.1f%%", temp, hum);
     } else {
       ESP_LOGW(TAG, "[DHT22] Doc that bai! (Loi: %d). Dung gia tri cu: %.1f°C",
@@ -59,9 +71,27 @@ static void dht_read_task(void *arg) {
     vTaskDelay(pdMS_TO_TICKS(2000));
   }
 }
+float fan_get_temperature(void) {
+    float temp;
+
+    if (dht_mutex) {
+        xSemaphoreTake(dht_mutex, portMAX_DELAY);
+        temp = g_dht_temp;
+        xSemaphoreGive(dht_mutex);
+    } else {
+        temp = g_dht_temp;
+    }
+
+    return temp;
+}
 
 void fan_speed_init(void) {
   // 1. Cấu hình 2 chân Direction (IN1, IN2)
+  dht_mutex = xSemaphoreCreateMutex();
+
+  if (dht_mutex == NULL) {
+    ESP_LOGE(TAG, "Tao mutex THAT BAI!");
+  }
   gpio_config_t io_conf = {};
   io_conf.intr_type = GPIO_INTR_DISABLE;
   io_conf.mode = GPIO_MODE_OUTPUT;
@@ -73,6 +103,7 @@ void fan_speed_init(void) {
   // Mặc định cho quay tới (IN1 = High, IN2 = Low)
   gpio_set_level(L298N_IN1_GPIO, 1);
   gpio_set_level(L298N_IN2_GPIO, 0);
+// delay nhỏ cho driver LEDC ổn định
 
   // 2. Cấu hình LEDC Timer cho chân ENA
   ledc_timer_config_t ledc_timer = {};
@@ -100,20 +131,31 @@ void fan_speed_init(void) {
            "Khoi tao L298N + DHT22. PWM: GPIO%d, IN1: GPIO%d, IN2: GPIO%d, "
            "DHT: GPIO%d",
            L298N_ENA_GPIO, L298N_IN1_GPIO, L298N_IN2_GPIO, DHT_GPIO);
+  
 }
 
 void fan_speed_update(float dist_m) {
   // 1. Lấy nhiệt độ mới nhất từ DHT22 (đọc ngầm bởi task)
-  float temp_c = g_dht_temp;
+  float temp_c;
+  gpio_set_level(L298N_IN1_GPIO, 1);
+  gpio_set_level(L298N_IN2_GPIO, 0);
+
+  if (dht_mutex) {
+      xSemaphoreTake(dht_mutex, portMAX_DELAY);
+      temp_c = g_dht_temp;
+      xSemaphoreGive(dht_mutex);
+  } else {
+      temp_c = g_dht_temp; // fallback
+  }
 
   // 2. Áp dụng bộ lọc EMA
   ema_dist = (EMA_ALPHA * dist_m) + ((1.0f - EMA_ALPHA) * ema_dist);
   ema_temp = (EMA_ALPHA * temp_c) + ((1.0f - EMA_ALPHA) * ema_temp);
 
   // 3. Tính toán PWM theo công thức tuyến tính
-  // PWM = Base + Kt(T - T_min) - Kd(D - D_min)
+  // PWM = Base + Kt(T - T_min) + Kd(D - D_min)
   float pwm_percent =
-      PWM_BASE + K_T * (ema_temp - TEMP_MIN) - K_D * (ema_dist - DIST_MIN);
+      PWM_BASE + K_T * (ema_temp - TEMP_MIN) + K_D * (ema_dist - DIST_MIN);
 
   // 4. Clamp giá trị phần trăm (50% -> 100%)
   pwm_percent = std::max(50.0f, std::min(pwm_percent, 100.0f));
@@ -133,8 +175,7 @@ void fan_speed_stop(void) {
   ledc_set_duty(LEDC_MODE, LEDC_CHANNEL, 0);
   ledc_update_duty(LEDC_MODE, LEDC_CHANNEL);
 
-  ema_dist = DIST_MIN;
-  ema_temp = TEMP_MIN;
-
-  ESP_LOGI(TAG, "QUAT DUNG hoan toan.");
+  // QUAN TRỌNG
+  gpio_set_level(L298N_IN1_GPIO, 0);
+  gpio_set_level(L298N_IN2_GPIO, 0);
 }
