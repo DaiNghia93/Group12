@@ -125,7 +125,7 @@ void fan_speed_init(void) {
   ESP_ERROR_CHECK(ledc_channel_config(&ledc_channel));
 
   // 4. Khởi tạo Task đọc DHT22 chạy ngầm
-  xTaskCreate(dht_read_task, "dht_read", 2048, NULL, 5, NULL);
+  xTaskCreate(dht_read_task, "dht_read", 2048, NULL, 2 , NULL);
 
   ESP_LOGI(TAG,
            "Khoi tao L298N + DHT22. PWM: GPIO%d, IN1: GPIO%d, IN2: GPIO%d, "
